@@ -1,0 +1,5 @@
+{
+  "name": "tk",
+  "description": "Three Kingdoms — Multi-model review and collaborative implementation. Claude orchestrates Codex (GPT) and Gemini CLI subprocesses for plan review, code review, and collaborative implementation.",
+  "version": "1.0.0"
+}

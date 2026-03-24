@@ -1,0 +1,7 @@
+# Runtime data (generated during /tk sessions)
+.tk-meeting/
+*.log
+
+# Local development (not part of the plugin)
+.claude/
+tk-skill-plan.md
