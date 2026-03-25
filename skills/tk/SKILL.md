@@ -1,6 +1,6 @@
 ---
 name: tk
-description: 多模型会审与协作实施。当用户说 /tk、开会、会审、让 codex 和 gemini 看看、多模型审查、three kingdoms 时使用。Claude 作为主持人调度 Codex 和 Gemini CLI 子进程进行预案审查、代码 review 和协作实施。
+description: 多模型会审与协作实施。当用户说 /tk、开会、会审、让 codex 和 gemini 看看、多模型审查、three kingdoms、start meeting、review meeting、multi-model review 时使用。Claude 作为主持人调度 Codex 和 Gemini CLI 子进程进行预案审查、代码 review 和协作实施。
 ---
 
 # Three Kingdoms (/tk) — 多模型会审与协作实施
@@ -18,10 +18,10 @@ description: 多模型会审与协作实施。当用户说 /tk、开会、会审
 
 用户说以下任何一种即触发本 skill：
 - `/tk`
-- "开会"
-- "会审"
-- "让 codex 和 gemini 看看"
-- "多模型审查"
+- "开会" / "start meeting"
+- "会审" / "review meeting"
+- "让 codex 和 gemini 看看" / "let codex and gemini take a look"
+- "多模型审查" / "multi-model review"
 - "three kingdoms"
 
 ---

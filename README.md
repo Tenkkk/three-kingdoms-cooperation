@@ -2,6 +2,10 @@
 
 **[中文文档](README.zh-CN.md)**
 
+### If you have Agent quotas for the big 3, congratulations! Using this skill will elevate your solution design and code quality to the next level.
+
+#### Depending on the difficulty and workload, the entire process may take tens of minutes on average, but you will receive a satisfying result every time.
+
 Multi-model review and collaborative implementation for Claude Code. Claude orchestrates Codex (GPT) and Gemini as CLI subprocesses to conduct plan reviews, code reviews, and collaborative implementation.
 
 ## How It Works
@@ -25,6 +29,12 @@ Claude (Opus) — Meeting host + executor
 - [Codex CLI](https://github.com/openai/codex) installed (`npm install -g @openai/codex`)
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed (`npm install -g @google/gemini-cli`)
 
+## Context
+
+When 3 Agents meet to discuss your requirements, the core that determines the quality ceiling is GPT (Codex), the floor is determined by Claude Code, and Gemini can fill in their blind spots and limitations.
+Therefore, it is recommended to use this skill when you have at least Codex and Claude Code.
+If you only have Claude Code, it can still help your Claude think and execute better.
+
 ## Installation
 
 ```bash
@@ -35,10 +45,10 @@ npx skills add Tenkkk/three-kingdoms-cooperation
 
 Trigger the skill by saying any of:
 - `/tk`
-- "开会" (start meeting)
-- "会审" (review meeting)
-- "让 codex 和 gemini 看看" (let codex and gemini take a look)
-- "多模型审查" (multi-model review)
+- "start meeting"
+- "review meeting"
+- "let codex and gemini take a look"
+- "multi-model review"
 - "three kingdoms"
 
 ### Example
@@ -87,6 +97,16 @@ skills/
   detect-workers/
     SKILL.md                 — Quick detection of installed CLI workers
 ```
+
+## Collaboration Modes
+
+This skill is refined from 10+ real production sessions and supports three collaboration modes:
+
+| Mode | Description | Typical Scenario |
+| --- | --- | --- |
+| **Joint Review** | Multiple models review the same plan and iterate to reach a consensus | Plan Review |
+| **Red-Blue Teaming** | One criticizes, one modifies, the third arbitrates | Solution Debate |
+| **Command-Execute** | One generates prompts, one executes code, one reviews | Code Implementation |
 
 ## License
 
