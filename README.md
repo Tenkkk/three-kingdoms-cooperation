@@ -13,7 +13,7 @@ Multi-model review and collaborative implementation for Claude Code. Claude orch
 ```
 You: "/tk" or "开会" (start meeting)
   ↓
-Claude (Opus) — Meeting host + executor
+Claude — Meeting host + executor
   ├── Codex (GPT) — Code reviewer + gatekeeper
   └── Gemini — Design + frontend + supplementary perspective
 ```
@@ -76,7 +76,7 @@ Claude: [Implements step by step, Codex reviews each step]
 - **Three-way APPROVE gate** — Codex + Gemini + Claude must all independently approve before implementation begins
 - **Step-by-step review** — Each implementation step is reviewed by Codex before proceeding to the next
 - **Independent thinking** — Workers are instructed to verify claims independently, not blindly agree
-- **Attribution** — Every message is prefixed with the speaker's identity (Opus/Codex/Gemini)
+- **Attribution** — Every message is prefixed with the speaker's identity (Claude/Codex/Gemini)
 - **Session management** — Tracks session IDs for multi-turn conversations with each worker
 - **Stream log** — Worker output is tee'd to a log file; open a second terminal with `tail -f` to watch in real-time
 

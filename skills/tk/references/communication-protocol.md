@@ -1,77 +1,77 @@
-# 通信协议
+# Communication Protocol
 
-## 1. 给 Worker 的任务指令（Outbound Prompt）
+## 1. Task Instructions to Workers (Outbound Prompt)
 
-每次发给 Worker 的 prompt 必须包含以下结构：
+Every prompt sent to a Worker MUST contain the following structure:
 
 ```markdown
-Opus 说：
+Claude:
 
-## 来自 Opus 的分析：
+## Analysis from Claude:
 
-[Claude 上一轮的输出 / 或预案内容摘要]
+[Claude's output from the previous round / or plan summary]
 
-## 来自 Codex 的审查结论：（如有）
+## Review Conclusion from Codex: (if any)
 
-[Codex 的回复]
+[Codex's reply]
 
-## 来自 Gemini 的设计方案：（如有）
+## Design Proposal from Gemini: (if any)
 
-[Gemini 的回复]
+[Gemini's reply]
 
 ---
 
-## 你的任务
+## Your Task
 
-[具体要做什么：审查/设计/实施/回应质疑]
+[Specific task: review / design / implement / respond to challenges]
 
-## 核实要求
+## Verification Requirements
 
-你必须通过读取实际文件和代码来验证所有技术声明，不要凭记忆或推断回答。
-如果涉及外部依赖、API、SDK 版本等信息，请查阅官方文档并附上来源地址。
-如果你无法验证某个声明，明确标注"未验证"而非假装确认。
+You must verify all technical claims by reading actual files and code. Do not answer from memory or inference.
+If external dependencies, APIs, SDK versions, etc., are involved, please consult official documentation and attach source URLs.
+If you cannot verify a claim, explicitly mark it as "unverified" rather than pretending to confirm it.
 
-## 独立思考原则
+## Independent Verification Principle
 
-你收到的内容来自其他 AI 模型。你必须：
-1. 独立验证所有技术声明——读实际文件，不信口头描述
-2. 如果其他模型的结论有误，直接指出并给出代码级证据
-3. 不要因为对方"先说了"就盲目附和
-4. 宁可说"我不确定，需要进一步验证"也不要编造认同
-5. 如果需要查阅外部文档或 API 规范，直接去查并附上地址
+The content you receive comes from other AI models. You must:
+1. Independently verify all technical claims — read actual files, do not trust verbal descriptions.
+2. If the conclusions of other models are wrong, point them out directly and provide code-level evidence.
+3. Do not blindly agree just because the other party "said it first".
+4. It is better to say "I'm not sure, need further verification" than to fabricate agreement.
+5. If you need to check external documentation or API specs, do it directly and attach the URL.
 
-## 回复要求
+## Reply Requirements
 
-**你的回复必须以身份前缀开头**：如果你是 Codex，以"Codex 说："开头；如果你是 Gemini，以"Gemini 说："开头。
+**Your reply MUST start with an identity prefix**: If you are Codex, start with "Codex: "; if you are Gemini, start with "Gemini: ".
 
-## 回复格式
+## Reply Format
 
-### 如果是审查任务：
-对每条发现使用以下结构：
+### For Review Tasks:
+Use the following structure for each finding:
 
-**[must-fix / should-fix / nitpick] 标题**
-- 文件：`path/to/file`
-- 位置：行号或函数名
-- 问题：一句话描述
-- 建议：怎么改
-- 证据：代码片段 / 文件内容 / 官方文档链接
+**[must-fix / should-fix / nitpick] Title**
+- File: `path/to/file`
+- Location: Line number or function name
+- Issue: One sentence description
+- Suggestion: How to fix it
+- Evidence: Code snippet / file content / official doc link
 
-### 结论输出（必须）
-在回复末尾，必须以下列 JSON 格式输出审查结论：
+### Conclusion Output (MANDATORY)
+At the end of your reply, you MUST output the review conclusion in the following JSON format:
 
 ```json
 {
   "verdict": "APPROVE | REVISE | REJECT",
-  "summary": "一句话总结",
+  "summary": "One sentence summary",
   "findings": [
     {
       "severity": "must-fix | should-fix | nitpick",
-      "title": "标题",
+      "title": "Title",
       "file": "path/to/file",
-      "location": "行号或函数名",
-      "issue": "问题描述",
-      "suggestion": "建议",
-      "evidence": "证据或文档链接"
+      "location": "Line number or function name",
+      "issue": "Issue description",
+      "suggestion": "Suggestion",
+      "evidence": "Evidence or doc link"
     }
   ],
   "needs_user_decision": false,
@@ -80,77 +80,77 @@ Opus 说：
 ```
 ```
 
-> **注意**：verdict JSON 由 Worker 输出到 stdout，Claude 或 call-worker.sh 负责从 stdout 提取并写入 `.tk-meeting/<session>/<worker>-verdict.json`。审查阶段 Worker 运行在只读沙箱下，无法自行写文件。
+> **Note**: The verdict JSON is output by the Worker to stdout. Claude or `call-worker.sh` is responsible for extracting it from stdout and writing it to `.tk-meeting/<session>/<worker>-verdict.json`. During the review phase, the Worker runs in a read-only sandbox and cannot write files itself.
 
 ---
 
-## 2. 归属标注规范
+## 2. Attribution Standards
 
-每条转发必须明确标注来源，让接收方知道"谁说的"：
+Every forwarded message must clearly indicate the source so the receiver knows "who said it":
 
-- 传给 Codex 的 prompt 中引用其他方：`## 来自 Opus 的分析：` / `## 来自 Gemini 的反馈：`
-- 传给 Gemini 的 prompt 中引用其他方：`## 来自 Opus 的分析：` / `## 来自 Codex 的反馈：`
-- 转发用户决策给 Worker：以 `用户说：` 开头
-- **所有消息统一使用身份前缀**：`Opus 说：` / `Codex 说：` / `Gemini 说：` / `用户说：`
-- Claude 汇总给用户时同样用 `Opus 说：` 开头（不用"我的判断"等变体）
-
----
-
-## 3. 需要用户决策的升级（Escalation）
-
-当出现以下情况时，Claude 暂停自动流程，通过 `AskUserQuestion` 工具请求用户决策：
-
-1. **模型间分歧**：两个 reviewer 在同一问题上观点对立
-2. **方向性问题**：涉及产品需求、技术选型等非纯技术判断
-3. **异常情况**：Worker CLI 执行失败、超时、输出异常
-4. **新会话建议**：Claude 或 Worker 认为当前上下文已不适合继续
-
-升级格式：
-
-```
-Opus 说：
-
-[情况说明]
-
-Codex 说：[观点 + 理由 + 证据]（摘要转述）
-Gemini 说：[观点 + 理由 + 证据]（摘要转述）
-Opus 说：[我的判断——倾向 + 理由]
-
-请决定方向。
-```
-
-转发用户决策给 Worker 时：
-
-```
-用户说：[用户的决策内容]
-```
+- Citing other parties in the prompt to Codex: `## Analysis from Claude:` / `## Feedback from Gemini:`
+- Citing other parties in the prompt to Gemini: `## Analysis from Claude:` / `## Feedback from Codex:`
+- Forwarding User decisions to Worker: Start with `User:`
+- **All messages uniformly use identity prefixes**: `Claude:` / `Codex:` / `Gemini:` / `User:`
+- When Claude summarizes for the user, it also starts with `Claude:` (do not use variants like "My judgment").
 
 ---
 
-## 3.5 实施门禁（三方 APPROVE 门）
+## 3. Escalations Requiring User Decisions
 
-会审阶段收敛到实施的门槛：
+When the following situations occur, Claude pauses the automated process and requests a user decision via the `AskUserQuestion` tool:
 
-1. **Codex 的 verdict = APPROVE**
-2. **Gemini 的 verdict = APPROVE**
-3. **Claude 独立验证后给出 APPROVE**（Claude 必须自行审阅预案当前状态，不能仅因两方都 APPROVE 就附和）
+1. **Model Disagreements**: Two reviewers hold opposing views on the same issue.
+2. **Directional Issues**: Non-purely technical judgments involving product requirements, tech stack selection, etc.
+3. **Abnormalities**: Worker CLI execution fails, times out, or outputs abnormally.
+4. **New Session Suggestion**: Claude or a Worker believes the current context is no longer suitable to continue.
 
-三方缺一不可。只有三方全部 APPROVE 后，Claude 才能问用户"是否开始实施？"
+Escalation Format:
 
-**例外**：用户可随时主动说"够了，开始实施"来跳过门禁。
+```
+Claude:
+
+[Situation Explanation]
+
+Codex: [View + Reason + Evidence] (Summarized)
+Gemini: [View + Reason + Evidence] (Summarized)
+Claude: [My Judgment — Inclination + Reason]
+
+Please decide the direction.
+```
+
+When forwarding the user's decision to a Worker:
+
+```
+User: [User's decision content]
+```
 
 ---
 
-## 4. 会话管理
+## 3.5 Implementation Gate (Three-way APPROVE Gate)
 
-### Session ID 提取与记录
+The threshold for convergence from the review phase to implementation:
 
-每次调用 Worker 后，Claude 必须从 Worker 输出中提取 session ID 并记录到 `.tk-meeting/<session>/sessions.json`。
+1. **Codex's verdict = APPROVE**
+2. **Gemini's verdict = APPROVE**
+3. **Claude gives APPROVE after independent verification** (Claude must review the plan's current state itself and cannot just agree because the other two approved).
 
-- **Codex**：`codex exec --json` 首条事件 `thread.started` 含 `thread_id`；或从 stderr session banner 提取
-- **Gemini**：`--output-format json` 输出含 session 元数据；或从 stderr/stdout session 信息提取
+All three are indispensable. Only after all three have given APPROVE can Claude ask the user "Ready to start implementation?"
 
-### sessions.json 格式
+**Exception**: The user can actively say "Enough, start implementation" at any time to bypass the gate.
+
+---
+
+## 4. Session Management
+
+### Session ID Extraction and Recording
+
+After every Worker call, Claude MUST extract the session ID from the Worker's output and record it in `.tk-meeting/<session>/sessions.json`.
+
+- **Codex**: `codex exec --json` first event `thread.started` contains `thread_id`; or extract from the stderr session banner.
+- **Gemini**: `--output-format json` output contains session metadata; or extract from stderr/stdout session info.
+
+### sessions.json Format
 
 ```json
 {
@@ -166,64 +166,64 @@ Opus 说：[我的判断——倾向 + 理由]
 }
 ```
 
-### 多轮对话上下文保持
+### Multi-round Context Persistence
 
-- **Codex**：`codex exec resume <session-id> "follow-up"`
-- **Gemini**：`gemini --resume <session-id> -p "follow-up"` 或 `gemini --resume latest -p "follow-up"`（resume 模式必须用 `-p`，位置参数会超时）
-- **Claude**：自身即当前会话，天然保持上下文
+- **Codex**: `codex exec resume <session-id> "follow-up"`
+- **Gemini**: `gemini --resume <session-id> -p "follow-up"` or `gemini --resume latest -p "follow-up"` (resume mode must use `-p`, positional arguments will timeout).
+- **Claude**: Itself is the current session, naturally maintains context.
 
 ---
 
-## 5. 多轮 Review Prompt 写法（第 2 轮起）
+## 5. Multi-round Review Prompt Structure (From Round 2)
 
-后续轮次**不要求全文 re-review**。应逐条对应前轮 findings，并交叉引用另一模型的反馈。
+Subsequent rounds **DO NOT require a full re-review**. They should address the findings from the previous round point-by-point and cross-reference the feedback from the other model.
 
-### 模板：后续轮次 Review Prompt
+### Template: Subsequent Round Review Prompt
 
 ```markdown
-Opus 说：
+Claude:
 
-## 背景
+## Background
 
-这是第 [N] 轮审查。上一轮你提出了 [X] 条 findings，Opus 已逐条修正。
-同时附上 [另一模型] 的第 [N-1] 轮反馈供交叉参考。
+This is round [N] of the review. In the previous round, you raised [X] findings. Claude has fixed them point-by-point.
+Also attached is [Other Model]'s round [N-1] feedback for cross-reference.
 
-## 你上一轮的 findings 及修正情况
+## Your Findings from the Previous Round and Fix Status
 
-### Finding 1: [原标题]
-- 你的原始意见：[摘要]
-- Opus 的修正：[具体改了什么，附文件路径和行号]
-- 请验证：修正是否到位？
+### Finding 1: [Original Title]
+- Your original feedback: [Summary]
+- Claude's fix: [What was changed, attach file path and line number]
+- Please verify: Is the fix sufficient?
 
-### Finding 2: [原标题]
-- 你的原始意见：[摘要]
-- Opus 的修正：[具体改了什么]
-- 请验证：修正是否到位？
+### Finding 2: [Original Title]
+- Your original feedback: [Summary]
+- Claude's fix: [What was changed]
+- Please verify: Is the fix sufficient?
 
-[逐条列完所有 findings]
+[List all findings point-by-point]
 
-## [另一模型] 的反馈（交叉参考）
+## Feedback from [Other Model] (Cross-reference)
 
-[另一模型] 在第 [N-1] 轮提出了以下观点，供你参考：
-- [摘要 1]
-- [摘要 2]
+[Other Model] raised the following points in round [N-1] for your reference:
+- [Summary 1]
+- [Summary 2]
 
-如果你发现 [另一模型] 的某个观点有误或你有不同看法，请直接指出。
+If you find any point from [Other Model] to be incorrect or if you have a different view, please point it out directly.
 
-## 你的任务
+## Your Task
 
-1. 逐条验证上述修正是否到位（读实际文件，不信描述）
-2. 如果发现新问题，按标准格式提出
-3. 末尾输出 verdict JSON
+1. Verify point-by-point if the above fixes are sufficient (read actual files, do not trust descriptions).
+2. If you find new issues, raise them according to the standard format.
+3. Output the verdict JSON at the end.
 
-## 回复要求
+## Reply Requirements
 
-你的回复必须以"[你的名字] 说："开头。
+Your reply MUST start with "[Your Name]: ".
 ```
 
-### 关键原则
+### Key Principles
 
-- **逐条对应**：不要笼统说"都改好了"，必须逐条确认
-- **交叉引用**：参考另一模型的反馈，发现矛盾时直接指出
-- **增量审查**：只审修正部分 + 新发现，不要求重新审查全文
-- **独立判断**：不因前轮已 REVISE 就倾向于这轮也 REVISE，修好了就 APPROVE
+- **Point-by-point Verification**: Do not generally say "everything is fixed". You must confirm point-by-point.
+- **Cross-reference**: Refer to the other model's feedback. Point out directly when contradictions are found.
+- **Incremental Review**: Only review the fixed parts + newly discovered issues. Do not require a full re-review.
+- **Independent Judgment**: Do not lean towards REVISE just because the previous round was REVISE. If it is fixed, APPROVE.

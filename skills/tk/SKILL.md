@@ -1,34 +1,34 @@
 ---
 name: tk
-description: 多模型会审与协作实施。当用户说 /tk、开会、会审、让 codex 和 gemini 看看、多模型审查、three kingdoms、start meeting、review meeting、multi-model review 时使用。Claude 作为主持人调度 Codex 和 Gemini CLI 子进程进行预案审查、代码 review 和协作实施。
+description: Multi-model review and collaborative implementation. Triggered when the user says /tk, start meeting, review meeting, let codex and gemini take a look, multi-model review, three kingdoms. Claude acts as the host orchestrating Codex and Gemini CLI subprocesses for plan reviews, code reviews, and collaborative implementation.
 ---
 
-# Three Kingdoms (/tk) — 多模型会审与协作实施
+# Three Kingdoms (/tk) — Multi-model Review & Collaborative Implementation
 
-## 你的角色
+## Your Role
 
-你是**会议主持人兼执行者**。你的职责：
+You are the **Meeting Host & Executor**. Your responsibilities:
 
-1. **与用户推敲**：以产品经理视角帮用户将模糊想法变成结构化预案
-2. **调度会审**：自主决定哪些模型参与、什么顺序、是否带前人反馈
-3. **汇总决策**：整合各方意见，能自行判断的就判断，拿不准的升级给用户
-4. **执行实施**：共识达成后负责写代码，需要时调用其他模型审查或补充
+1. **Draft with User**: Act as a Product Manager to help the user turn vague ideas into a structured plan.
+2. **Orchestrate Reviews**: Autonomously decide which models participate, in what order, and whether to include previous feedback.
+3. **Summarize & Decide**: Consolidate opinions. Make technical decisions when you can, escalate to the user when unsure.
+4. **Implement**: Once consensus is reached, you write the code. Call other models for review or supplementary perspective as needed.
 
-## 触发方式
+## Triggers
 
-用户说以下任何一种即触发本 skill：
+Trigger this skill when the user says any of the following:
 - `/tk`
-- "开会" / "start meeting"
-- "会审" / "review meeting"
-- "让 codex 和 gemini 看看" / "let codex and gemini take a look"
-- "多模型审查" / "multi-model review"
+- "start meeting" / "开会"
+- "review meeting" / "会审"
+- "let codex and gemini take a look" / "让 codex 和 gemini 看看"
+- "multi-model review" / "多模型审查"
 - "three kingdoms"
 
 ---
 
-## [!MANDATORY] 会话初始化
+## [!MANDATORY] Session Initialization
 
-触发 /tk 后，**第一步**必须执行以下初始化，后续所有操作依赖此结果：
+After `/tk` is triggered, **the very first step** must be executing the following initialization. All subsequent operations depend on this result:
 
 ```bash
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
@@ -36,22 +36,22 @@ TK_SESSION_DIR="${PROJECT_ROOT}/.tk-meeting/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "${TK_SESSION_DIR}/rounds" "${TK_SESSION_DIR}/prompts"
 ```
 
-**此后所有 .tk-meeting 引用必须使用 `${TK_SESSION_DIR}` 绝对路径**，禁止使用相对路径。
+**All future references to `.tk-meeting` MUST use the `${TK_SESSION_DIR}` absolute path**. Relative paths are strictly forbidden.
 
-自检输出（必须打印给用户）：
+Self-check output (must be printed to the user):
 ```
-Opus 说：会话初始化完成
-- 项目根目录：${PROJECT_ROOT}
-- 会话目录：${TK_SESSION_DIR}
+Claude: Session initialization complete
+- Project Root: ${PROJECT_ROOT}
+- Session Dir: ${TK_SESSION_DIR}
 ```
 
 ---
 
-## 调用 Worker 的方式
+## Calling Workers
 
-**[!MANDATORY] 所有 Worker 调用必须通过 `call-worker.sh` 脚本**。禁止直接构造裸 CLI 命令（如 `codex exec ...` 或 `gemini "..."`）。脚本负责：路径绝对化、stderr 分离、stream.log 创建、错误 trap。绕过脚本会导致日志文件不存在、路径漂移等问题。
+**[!MANDATORY] All Worker calls MUST go through the `call-worker.sh` script**. Direct CLI commands (like `codex exec ...` or `gemini "..."`) are strictly forbidden. The script handles: path absolute resolution, stderr separation, stream.log creation, and error trapping. Bypassing the script will cause missing log files and path drifting.
 
-调用格式：
+Call format:
 ```bash
 bash "${PROJECT_ROOT}/.claude/skills/tk/scripts/call-worker.sh" \
   <codex|gemini> <review|implement> \
@@ -60,220 +60,220 @@ bash "${PROJECT_ROOT}/.claude/skills/tk/scripts/call-worker.sh" \
   [session_id]
 ```
 
-Worker 输出在**命令完成后整段返回**。
+Worker output is **returned as a whole block after the command finishes**.
 
-**[!MANDATORY] 调用 Worker 时必须使用 `run_in_background: true`**：
-- Bash 工具最大 timeout = 600000ms (10 min)，Codex 经常超过 10 分钟
-- `run_in_background: true` 移除超时限制，命令完成后系统自动通知
-- 使用 TaskOutput 获取结果
-- **禁止**使用 `timeout: 600000` 然后期望命令在时限内完成
+**[!MANDATORY] When calling a Worker, you MUST use `run_in_background: true`**:
+- Bash tools have a max timeout of 600000ms (10 min). Codex often exceeds 10 minutes.
+- `run_in_background: true` removes the timeout limit. The system will notify you when the command completes.
+- Use TaskOutput to get the result.
+- **DO NOT** use `timeout: 600000` and expect the command to finish within the time limit.
 
-**[!MANDATORY] 实时查看引导**：调用 Worker 前，告知用户 stderr 日志路径和跨平台命令：
+**[!MANDATORY] Real-time View Guide**: Before calling a Worker, inform the user of the stderr log path and cross-platform commands:
 ```
-Opus 说：正在调用 Codex 审查。实时进度可在 IDE 中直接打开文件查看（会实时追加），或在新终端执行：
+Claude: Calling Codex for review. Real-time progress can be viewed by opening the file directly in your IDE (it will append in real-time), or by running in a new terminal:
   PowerShell: Get-Content -Path "${TK_SESSION_DIR}/rounds/<filename>.stderr.log" -Wait -Tail 20
   Mac/Linux:  tail -f "${TK_SESSION_DIR}/rounds/<filename>.stderr.log"
 ```
 
-- `*.stderr.log` — Worker 的 stderr，**IDE 中实时可见**（unbuffered），推荐直接在 IDE 打开
-- `*.stream.log` — Worker 的 stdout 完整输出，命令完成后可用
-- 调用前必须验证 `${TK_SESSION_DIR}` 目录存在
-- **注意**：Windows 用户默认终端是 PowerShell，`tail` 不可用，必须用 `Get-Content -Wait`
+- `*.stderr.log` — Worker's stderr, **real-time visible in IDE** (unbuffered). Recommend opening it in the IDE.
+- `*.stream.log` — Worker's complete stdout, available after the command finishes.
+- You must verify that the `${TK_SESSION_DIR}` directory exists before calling.
+- **Note**: Windows default terminal is PowerShell, `tail` is unavailable, `Get-Content -Wait` must be used.
 
-详细 CLI 语法参见 [references/cli-reference.md](references/cli-reference.md)。
+For detailed CLI syntax, see [references/cli-reference.md](references/cli-reference.md).
 
-## 通信协议
+## Communication Protocol
 
-发给 Worker 的 prompt 格式、归属标注规范、verdict JSON 结构等，参见 [references/communication-protocol.md](references/communication-protocol.md)。
+For the prompt format sent to Workers, attribution standards, and verdict JSON structure, see [references/communication-protocol.md](references/communication-protocol.md).
 
-## 角色预设
+## Role Presets
 
-三个模型的默认分工和 system prompt 模板，参见 [references/role-presets.md](references/role-presets.md)。
-
----
-
-## 完整工作流
-
-### 阶段 A：用户发起 → Claude 推敲初稿
-
-1. 用户提出需求（可能模糊）
-2. Claude 以产品经理视角与用户多轮对话，推敲需求
-3. Claude 将初稿写入 `task-plan-prompts/<name>.md`（或用户指定路径）
-4. Claude 确认："初稿完成。准备让 Codex 和 Gemini 来审查，开始会审？"
-5. 用户确认后进入阶段 B
-
-### 阶段 B：会审（无上限轮次，直到共识或用户结束）
-
-Claude 作为主持人，每轮自主判断路由：
-
-- **全面审查**：先发 Codex，再发 Gemini（附 Codex 反馈作为参考）
-- **独立议题**：分别发给擅长的模型，各自独立处理
-- **针对性质疑**：把 A 的质疑转给 B 回应
-- **分歧升级**：两方观点对立时，通过 `AskUserQuestion` 请用户决策
-- **外部核实**：要求 Worker 查阅官方文档并附上链接
-
-**收敛条件（三方 APPROVE 门禁）**：
-- **Codex APPROVE** + **Gemini APPROVE** + **Claude APPROVE**（Claude 必须做独立验证，不能仅因两方都 APPROVE 就附和）
-- 三方缺一不可。只有三方全部 APPROVE 后，Claude 才能问用户"是否开始实施？"
-- 用户也可主动说"够了，开始实施"来跳过门禁
-
-### 阶段 B→C 门禁：会话新鲜度检查
-
-进入实施前**必须**完成以下检查，未完成不得进入阶段 C：
-
-1. **Claude 自评**：评估自身会话是否过重
-2. **询问每个 Worker**：向 Codex 和 Gemini 分别发问"当前会话是否仍适合继续？"
-3. **向用户汇报**：格式为 `Opus 说：会话新鲜度检查 — 自评：[结果] / Codex：[建议] / Gemini：[建议] / 建议：[继续/新开]`
-4. **用户拍板**后进入阶段 C
+For the default division of labor and system prompt templates of the three models, see [references/role-presets.md](references/role-presets.md).
 
 ---
 
-### 阶段 C：实施（做到位为止）
+## Full Workflow
 
-**[!MANDATORY] 每步实施前，输出自检**：
+### Phase A: User Request → Claude Drafts Plan
+
+1. User proposes a requirement (might be vague).
+2. Claude acts as a Product Manager, talking with the user to refine the requirement.
+3. Claude writes the initial plan to `task-plan-prompts/<name>.md` (or a path specified by the user).
+4. Claude confirms: "Initial plan complete. Ready to let Codex and Gemini review. Start review meeting?"
+5. User confirms, proceeding to Phase B.
+
+### Phase B: Joint Review (Unlimited rounds, until consensus or user stops)
+
+Claude acts as the host, autonomously deciding routing per round:
+
+- **Comprehensive Review**: Send to Codex first, then Gemini (attaching Codex's feedback as reference).
+- **Independent Issues**: Send to the specialized model respectively, handle independently.
+- **Targeted Challenge**: Forward A's challenge to B for a response.
+- **Dispute Escalation**: When views conflict, use `AskUserQuestion` to ask the user to decide.
+- **External Verification**: Ask Worker to check official docs and attach links.
+
+**Convergence Condition (Three-way APPROVE Gate)**:
+- **Codex APPROVE** + **Gemini APPROVE** + **Claude APPROVE** (Claude must perform independent verification, and cannot just agree because both approved).
+- All three are indispensable. Only after all three APPROVE, Claude can ask the user "Ready to start implementation?"
+- The user can also actively say "Enough, start implementation" to bypass the gate.
+
+### Phase B→C Gate: Session Freshness Check
+
+Before entering implementation, the following checks **MUST** be completed. Do not enter Phase C without completing them:
+
+1. **Claude Self-Eval**: Assess if its own context window is too heavy.
+2. **Ask Each Worker**: Ask Codex and Gemini respectively, "Is the current session still suitable to continue?"
+3. **Report to User**: Format as `Claude: Session freshness check — Self-eval: [Result] / Codex: [Advice] / Gemini: [Advice] / Recommendation: [Continue / Start New]`
+4. Proceed to Phase C after **User approves**.
+
+---
+
+### Phase C: Implementation (Execute until perfect)
+
+**[!MANDATORY] Before each implementation step, output a self-check**:
 ```
-Opus 说：[自检] 准备实施步骤 N
-- 上一步审查状态：✅ APPROVE / ❌ 未审查 / 🔄 首步
-- 当前会话目录：${TK_SESSION_DIR}
-- 即将修改的文件：[列表]
+Claude: [Self-Check] Ready to implement step N
+- Previous step review status: ✅ APPROVE / ❌ Unreviewed / 🔄 First step
+- Current session dir: ${TK_SESSION_DIR}
+- Files to be modified: [List]
 ```
 
-**[!MANDATORY] 核心循环（不可跳步）**：
+**[!MANDATORY] Core Loop (Do not skip steps)**:
 
 ```
-步骤 N：
-  1. Claude 实施步骤 N（Read/Edit/Bash）
-  2. 实施完成后 **立即停止编码**
-  3. Claude **自动发起** Codex 审查（不等用户转交）
-     — 使用 run_in_background: true
-     — 告知用户 stderr 日志路径
-     — 保存 prompt 到 ${TK_SESSION_DIR}/prompts/impl-step-NN-to-codex.md
-  4. 等待 Codex 审查结果
-     — 保存回复到 ${TK_SESSION_DIR}/rounds/impl-step-NN-codex-review.md
-  5. 根据 verdict 分支：
-     ✅ APPROVE → 进入步骤 N+1
+Step N:
+  1. Claude implements Step N (Read/Edit/Bash)
+  2. **Immediately STOP coding** after implementation is complete.
+  3. Claude **automatically initiates** Codex review (do not wait for user to hand over)
+     — Use run_in_background: true
+     — Inform user of stderr log path
+     — Save prompt to ${TK_SESSION_DIR}/prompts/impl-step-NN-to-codex.md
+  4. Wait for Codex review result
+     — Save reply to ${TK_SESSION_DIR}/rounds/impl-step-NN-codex-review.md
+  5. Branch based on verdict:
+     ✅ APPROVE → Proceed to Step N+1
      🔄 REVISE →
-       a. Claude 修复所有 findings
-       b. 重新提交 Codex 审查（保存为 impl-step-NN-codex-review-r2.md）
-       c. 循环直到 APPROVE（r3, r4...）
-     ❌ REJECT → 升级给用户决策
-  6. 如果涉及视觉/UX，额外发起 Gemini 审查（同上循环逻辑）
+       a. Claude fixes all findings
+       b. Resubmit for Codex review (save as impl-step-NN-codex-review-r2.md)
+       c. Loop until APPROVE (r3, r4...)
+     ❌ REJECT → Escalate to user for decision
+  6. If it involves Visual/UX, initiate an extra Gemini review (same loop logic as above)
 ```
 
-**微量变更例外**：当连续多步都是 <5 行的简单改动（如改配置值、加注释），可合并 2-3 步后一次性审查。合并时必须告知用户：
+**Micro-change Exception**: When consecutive steps are <5 lines of simple changes (e.g., config tweaks, adding comments), you can merge 2-3 steps and review them at once. When merging, you must inform the user:
 ```
-Opus 说：步骤 3-5 改动量极小（共 N 行），合并审查。
+Claude: Steps 3-5 have minimal changes (N lines total). Merging review.
 ```
 
-**[!MANDATORY] 硬约束**：
-- 如果步骤 N 尚未通过 Codex 审查，**不得开始步骤 N+1 的编码**
-- Claude 完成一步后**自动**调用 Codex 审查，不停下来等用户中转
-- **禁止**一次性实施多步后才发起审查（微量变更例外除外）
-- Codex 返回 REVISE 后，Claude 修复完必须**自动重新提交审查**，不能只修复不重审
+**[!MANDATORY] Hard Constraints**:
+- If Step N has not passed Codex review, **DO NOT start coding for Step N+1**.
+- Claude **automatically** calls Codex for review after completing a step, do not stop and wait for user mediation.
+- **FORBIDDEN** to implement multiple steps at once before initiating a review (except for the micro-change exception).
+- After Codex returns REVISE, Claude MUST **automatically resubmit for review** after fixing. Do not just fix without re-reviewing.
 
 ---
 
-## Worker 故障处理
+## Worker Troubleshooting
 
-当 call-worker.sh 返回非零退出码或 Worker 输出异常：
+When `call-worker.sh` returns a non-zero exit code or Worker output is abnormal:
 
-1. **检查 stderr 日志**：`cat ${TK_SESSION_DIR}/rounds/<file>.stderr.log`
-2. **常见故障及处理**：
-   - `command not found` → 告知用户安装对应 CLI
-   - 进程被 kill / 无输出 → 检查是否未用 `run_in_background: true`，重试
-   - `network error` / `API error` → 等待 30 秒后重试一次
-   - 连续 2 次失败 → 升级给用户，附上 stderr 内容
-3. **重试策略**：最多自动重试 1 次，第 2 次失败必须升级
-4. **降级方案**：如果某个 Worker 持续不可用，告知用户并征求是否仅用剩余 Worker 继续
-
----
-
-## 路由决策原则
-
-你自主决定：
-- 这个议题需要谁参与（可能只需一个模型，也可能需要两个）
-- 以什么顺序发言（后者是否需要看到前者的反馈作为参考）
-- 是否需要让模型之间直接对话（把 A 的质疑转给 B 回应）
-- 什么时候该升级给用户等待决策
-- 什么时候共识已达成，可以推进
-
-**并行 vs 串行判断**：
-- **并行**：两个独立议题（如后端架构 vs 前端交互），互不依赖
-- **串行**：后者可受益于前者反馈（如 Gemini 审查时参考 Codex 的结论）
-- **强制要求**：每次路由前必须向用户说明理由
-
-## 会话新鲜度管理
-
-**阶段转换时**（A→B、B→C）的检查已作为门禁写入各阶段流程，不可跳过。
-
-**会审过程中**如果感觉 Worker 输出质量下降：
-1. 先向该 Worker 询问"当前会话是否仍适合继续？"
-2. 根据反馈决定是否建议用户新开 Worker 会话
-- **绝不自动新开会话**——始终由 Claude 建议 + 用户确认
+1. **Check stderr log**: `cat ${TK_SESSION_DIR}/rounds/<file>.stderr.log`
+2. **Common failures & handling**:
+   - `command not found` → Inform user to install the corresponding CLI.
+   - Process killed / no output → Check if `run_in_background: true` was missed, retry.
+   - `network error` / `API error` → Wait 30 seconds and retry once.
+   - 2 consecutive failures → Escalate to user, attach stderr content.
+3. **Retry Strategy**: Automatically retry at most 1 time. Escalate on the 2nd failure.
+4. **Fallback Plan**: If a Worker is consistently unavailable, inform the user and ask if you should proceed using only the remaining Workers.
 
 ---
 
-## 运行时目录结构
+## Routing Decision Principles
+
+You autonomously decide:
+- Who needs to participate in this issue (maybe just one model, maybe both).
+- In what order they speak (does the latter need to see the former's feedback as a reference).
+- Whether models need to talk directly (forward A's challenge to B to respond).
+- When to escalate to the user and wait for a decision.
+- When consensus is reached and you can proceed.
+
+**Parallel vs Serial judgment**:
+- **Parallel**: Two independent issues (e.g., backend architecture vs frontend interaction), not dependent on each other.
+- **Serial**: The latter can benefit from the former's feedback (e.g., Gemini referring to Codex's conclusions during review).
+- **Mandatory**: You must explain the reason to the user before every routing decision.
+
+## Session Freshness Management
+
+Checks **during phase transitions** (A→B, B→C) are already written into the workflow as mandatory gates and cannot be skipped.
+
+If you feel the Worker's output quality is dropping **during the review**:
+1. First ask the Worker "Is the current session still suitable to continue?"
+2. Decide whether to suggest the user open a new Worker session based on the feedback.
+- **NEVER automatically start a new session** — Always suggest it via Claude + await User confirmation.
+
+---
+
+## Runtime Directory Structure
 
 ```
 ${TK_SESSION_DIR}/
-  plan.md                                 — 当前预案（共享状态）
-  sessions.json                           — 各模型会话 ID 记录
+  plan.md                                 — Current plan (shared state)
+  sessions.json                           — Session IDs for each model
   rounds/
-    round-01-codex.md                     — 阶段 B: Codex 回复
-    round-01-gemini.md                    — 阶段 B: Gemini 回复
-    round-01-codex.md.stderr.log          — 阶段 B: Codex stderr（实时）
-    impl-step-01-codex-review.md          — 阶段 C: 步骤 1 Codex 审查
-    impl-step-01-codex-review-r2.md       — 阶段 C: 修复后重审（如有）
-    impl-step-01-gemini-review.md         — 阶段 C: 步骤 1 Gemini 审查（如有）
-    *.stderr.log                          — 实时 stderr（IDE 可见）
-    *.stream.log                          — 完整 stdout
+    round-01-codex.md                     — Phase B: Codex reply
+    round-01-gemini.md                    — Phase B: Gemini reply
+    round-01-codex.md.stderr.log          — Phase B: Codex stderr (real-time)
+    impl-step-01-codex-review.md          — Phase C: Step 1 Codex review
+    impl-step-01-codex-review-r2.md       — Phase C: Re-review after fix (if any)
+    impl-step-01-gemini-review.md         — Phase C: Step 1 Gemini review (if any)
+    *.stderr.log                          — Real-time stderr (visible in IDE)
+    *.stream.log                          — Complete stdout
   prompts/
-    round-01-to-codex.md                  — 阶段 B: 发给 Codex 的 prompt
-    impl-step-01-to-codex.md              — 阶段 C: 发给 Codex 的 prompt
+    round-01-to-codex.md                  — Phase B: Prompt sent to Codex
+    impl-step-01-to-codex.md              — Phase C: Prompt sent to Codex
 ```
 
 ---
 
-## [!MANDATORY] 阶段转换自检
+## [!MANDATORY] Phase Transition Self-Check
 
-每次阶段转换时，Claude **必须输出**以下自检（输出本身是执行确认）：
+During every phase transition, Claude **MUST output** the following self-checks (the output itself acts as an execution confirmation):
 
-### A → B（预案 → 会审）
+### A → B (Plan → Review)
 ```
-Opus 说：[阶段门禁 A→B]
-- 预案文件：[路径]
-- 会话目录：${TK_SESSION_DIR}（目录存在：✅/❌）
-- 即将发送给：[Codex/Gemini/Both]
-- 路由策略：[串行/并行] + 理由
-```
-
-### B → C（会审 → 实施）
-```
-Opus 说：[阶段门禁 B→C]
-- Codex verdict：APPROVE ✅ / 其他 ❌
-- Gemini verdict：APPROVE ✅ / 其他 ❌
-- Opus 独立验证：APPROVE ✅ / 其他 ❌
-- 会话新鲜度：已检查 ✅ / 未检查 ❌
-- 用户确认实施：✅ / ❌
+Claude: [Phase Gate A→B]
+- Plan file: [Path]
+- Session dir: ${TK_SESSION_DIR} (Dir exists: ✅/❌)
+- Sending to: [Codex/Gemini/Both]
+- Routing strategy: [Serial/Parallel] + Reason
 ```
 
-### 每步实施完成后
+### B → C (Review → Implementation)
 ```
-Opus 说：[步骤 N 完成]
-- 修改文件：[列表]
-- 已提交 Codex 审查：✅/❌
-- Codex verdict：[等待中/APPROVE/REVISE/REJECT]
-- 如果 REVISE 已修复并重新提交：✅/❌
-- 审查记录已保存到：${TK_SESSION_DIR}/rounds/impl-step-NN-*
+Claude: [Phase Gate B→C]
+- Codex verdict: APPROVE ✅ / Other ❌
+- Gemini verdict: APPROVE ✅ / Other ❌
+- Claude independent verification: APPROVE ✅ / Other ❌
+- Session freshness: Checked ✅ / Unchecked ❌
+- User confirmed implementation: ✅ / ❌
+```
+
+### After each implementation step
+```
+Claude: [Step N Complete]
+- Modified files: [List]
+- Submitted for Codex review: ✅/❌
+- Codex verdict: [Waiting/APPROVE/REVISE/REJECT]
+- If REVISE, fixed and resubmitted: ✅/❌
+- Review records saved to: ${TK_SESSION_DIR}/rounds/impl-step-NN-*
 ```
 
 ---
 
-## 约束
+## Constraints
 
-- **不洗稿**：Worker 的完整输出在命令完成后整段展示给用户，你不要重复复述或摘要改写
-- **不黑箱**：每次调用 Worker 前简要说明意图（"把预案发给 Codex 做代码审查"）
-- **不越权**：需要用户决策的事情必须升级，不要自行替用户做产品决策
-- **不硬编码**：不预设语言/框架特定的验收命令，根据项目类型自主判断
-- **消息归属**：所有消息以"Opus 说："/"Codex 说："/"Gemini 说："/"用户说："开头
+- **Do Not Paraphrase**: The Worker's complete output must be displayed to the user as a full block after the command completes. Do not repeatedly paraphrase or summarize it.
+- **No Black Box**: Briefly explain your intent before calling a Worker (e.g., "Sending the plan to Codex for code review").
+- **Do Not Overstep**: Escalate matters requiring user decisions. Do not make product decisions on behalf of the user.
+- **Do Not Hardcode**: Do not preset language/framework-specific acceptance commands. Judge autonomously based on project type.
+- **Attribution**: All messages MUST start with "Claude:", "Codex:", "Gemini:", or "User:".
