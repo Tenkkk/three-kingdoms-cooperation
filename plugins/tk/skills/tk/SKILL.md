@@ -24,11 +24,61 @@ description: 多模型会审与协作实施。当用户说 /tk、开会、会审
 - "多模型审查"
 - "three kingdoms"
 
+---
+
+## [!MANDATORY] 会话初始化
+
+触发 /tk 后，**第一步**必须执行以下初始化，后续所有操作依赖此结果：
+
+```bash
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+TK_SESSION_DIR="${PROJECT_ROOT}/.tk-meeting/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "${TK_SESSION_DIR}/rounds" "${TK_SESSION_DIR}/prompts"
+```
+
+**此后所有 .tk-meeting 引用必须使用 `${TK_SESSION_DIR}` 绝对路径**，禁止使用相对路径。
+
+自检输出（必须打印给用户）：
+```
+Opus 说：会话初始化完成
+- 项目根目录：${PROJECT_ROOT}
+- 会话目录：${TK_SESSION_DIR}
+```
+
+---
+
 ## 调用 Worker 的方式
 
-通过 Bash 工具调用 CLI 子进程。Worker 输出在**命令完成后整段返回**给用户。
+**[!MANDATORY] 所有 Worker 调用必须通过 `call-worker.sh` 脚本**。禁止直接构造裸 CLI 命令（如 `codex exec ...` 或 `gemini "..."`）。脚本负责：路径绝对化、stderr 分离、stream.log 创建、错误 trap。绕过脚本会导致日志文件不存在、路径漂移等问题。
 
-**可选实时查看**：Worker 输出同时写入 `.tk-meeting/<session>/` 下的 `.stream.log` 文件。调用 Worker 前，Claude 会告知用户 stream log 路径，用户可在 IDE 中另开一个终端执行 `tail -f <stream_log>` 实时逐行观看 Worker 输出。
+调用格式：
+```bash
+bash "${PROJECT_ROOT}/.claude/skills/tk/scripts/call-worker.sh" \
+  <codex|gemini> <review|implement> \
+  "${TK_SESSION_DIR}/prompts/<prompt-file>.md" \
+  "${TK_SESSION_DIR}/rounds/<output-file>.md" \
+  [session_id]
+```
+
+Worker 输出在**命令完成后整段返回**。
+
+**[!MANDATORY] 调用 Worker 时必须使用 `run_in_background: true`**：
+- Bash 工具最大 timeout = 600000ms (10 min)，Codex 经常超过 10 分钟
+- `run_in_background: true` 移除超时限制，命令完成后系统自动通知
+- 使用 TaskOutput 获取结果
+- **禁止**使用 `timeout: 600000` 然后期望命令在时限内完成
+
+**[!MANDATORY] 实时查看引导**：调用 Worker 前，告知用户 stderr 日志路径和跨平台命令：
+```
+Opus 说：正在调用 Codex 审查。实时进度可在 IDE 中直接打开文件查看（会实时追加），或在新终端执行：
+  PowerShell: Get-Content -Path "${TK_SESSION_DIR}/rounds/<filename>.stderr.log" -Wait -Tail 20
+  Mac/Linux:  tail -f "${TK_SESSION_DIR}/rounds/<filename>.stderr.log"
+```
+
+- `*.stderr.log` — Worker 的 stderr，**IDE 中实时可见**（unbuffered），推荐直接在 IDE 打开
+- `*.stream.log` — Worker 的 stdout 完整输出，命令完成后可用
+- 调用前必须验证 `${TK_SESSION_DIR}` 目录存在
+- **注意**：Windows 用户默认终端是 PowerShell，`tail` 不可用，必须用 `Get-Content -Wait`
 
 详细 CLI 语法参见 [references/cli-reference.md](references/cli-reference.md)。
 
@@ -39,6 +89,8 @@ description: 多模型会审与协作实施。当用户说 /tk、开会、会审
 ## 角色预设
 
 三个模型的默认分工和 system prompt 模板，参见 [references/role-presets.md](references/role-presets.md)。
+
+---
 
 ## 完整工作流
 
@@ -74,25 +126,67 @@ Claude 作为主持人，每轮自主判断路由：
 3. **向用户汇报**：格式为 `Opus 说：会话新鲜度检查 — 自评：[结果] / Codex：[建议] / Gemini：[建议] / 建议：[继续/新开]`
 4. **用户拍板**后进入阶段 C
 
+---
+
 ### 阶段 C：实施（做到位为止）
 
-**硬性流程（编号循环，不可跳步）**：
+**[!MANDATORY] 每步实施前，输出自检**：
+```
+Opus 说：[自检] 准备实施步骤 N
+- 上一步审查状态：✅ APPROVE / ❌ 未审查 / 🔄 首步
+- 当前会话目录：${TK_SESSION_DIR}
+- 即将修改的文件：[列表]
+```
+
+**[!MANDATORY] 核心循环（不可跳步）**：
 
 ```
-对预案中的每个步骤 N：
+步骤 N：
   1. Claude 实施步骤 N（Read/Edit/Bash）
   2. 实施完成后 **立即停止编码**
   3. Claude **自动发起** Codex 审查（不等用户转交）
-     — 告知用户 stream log 路径，提示可选 tail -f
+     — 使用 run_in_background: true
+     — 告知用户 stderr 日志路径
+     — 保存 prompt 到 ${TK_SESSION_DIR}/prompts/impl-step-NN-to-codex.md
   4. 等待 Codex 审查结果
-  5. 如果涉及视觉/UX，自动发起 Gemini 审查
-  6. 审查全部通过后，才可进入步骤 N+1
+     — 保存回复到 ${TK_SESSION_DIR}/rounds/impl-step-NN-codex-review.md
+  5. 根据 verdict 分支：
+     ✅ APPROVE → 进入步骤 N+1
+     🔄 REVISE →
+       a. Claude 修复所有 findings
+       b. 重新提交 Codex 审查（保存为 impl-step-NN-codex-review-r2.md）
+       c. 循环直到 APPROVE（r3, r4...）
+     ❌ REJECT → 升级给用户决策
+  6. 如果涉及视觉/UX，额外发起 Gemini 审查（同上循环逻辑）
 ```
 
-**硬约束**：
-- 如果步骤 N 尚未通过 Codex 审查，**不得 Edit/Bash 改步骤 N+1 的代码**
-- Claude 完成一步后**自动**调用 Codex 审查，除非 CLI 故障或需要用户裁决，否则不停下来等用户中转
-- **禁止**一次性实施多步后才发起审查
+**微量变更例外**：当连续多步都是 <5 行的简单改动（如改配置值、加注释），可合并 2-3 步后一次性审查。合并时必须告知用户：
+```
+Opus 说：步骤 3-5 改动量极小（共 N 行），合并审查。
+```
+
+**[!MANDATORY] 硬约束**：
+- 如果步骤 N 尚未通过 Codex 审查，**不得开始步骤 N+1 的编码**
+- Claude 完成一步后**自动**调用 Codex 审查，不停下来等用户中转
+- **禁止**一次性实施多步后才发起审查（微量变更例外除外）
+- Codex 返回 REVISE 后，Claude 修复完必须**自动重新提交审查**，不能只修复不重审
+
+---
+
+## Worker 故障处理
+
+当 call-worker.sh 返回非零退出码或 Worker 输出异常：
+
+1. **检查 stderr 日志**：`cat ${TK_SESSION_DIR}/rounds/<file>.stderr.log`
+2. **常见故障及处理**：
+   - `command not found` → 告知用户安装对应 CLI
+   - 进程被 kill / 无输出 → 检查是否未用 `run_in_background: true`，重试
+   - `network error` / `API error` → 等待 30 秒后重试一次
+   - 连续 2 次失败 → 升级给用户，附上 stderr 内容
+3. **重试策略**：最多自动重试 1 次，第 2 次失败必须升级
+4. **降级方案**：如果某个 Worker 持续不可用，告知用户并征求是否仅用剩余 Worker 继续
+
+---
 
 ## 路由决策原则
 
@@ -106,7 +200,7 @@ Claude 作为主持人，每轮自主判断路由：
 **并行 vs 串行判断**：
 - **并行**：两个独立议题（如后端架构 vs 前端交互），互不依赖
 - **串行**：后者可受益于前者反馈（如 Gemini 审查时参考 Codex 的结论）
-- **强制要求**：每次路由前必须向用户说明理由（"Codex 先审架构，Gemini 再审交互并参考 Codex 反馈"或"两个议题独立，并行发出"）
+- **强制要求**：每次路由前必须向用户说明理由
 
 ## 会话新鲜度管理
 
@@ -117,21 +211,64 @@ Claude 作为主持人，每轮自主判断路由：
 2. 根据反馈决定是否建议用户新开 Worker 会话
 - **绝不自动新开会话**——始终由 Claude 建议 + 用户确认
 
-## 运行时目录
+---
 
-每次会审在 `.tk-meeting/<session-id>/` 下创建运行时数据：
+## 运行时目录结构
 
 ```
-.tk-meeting/<session-id>/
-  plan.md                         — 当前预案文件（共享状态）
-  sessions.json                   — 各模型会话 ID 记录
+${TK_SESSION_DIR}/
+  plan.md                                 — 当前预案（共享状态）
+  sessions.json                           — 各模型会话 ID 记录
   rounds/
-    round-01-codex.md             — 第 1 轮 Codex 的原始回复
-    round-01-gemini.md            — 第 1 轮 Gemini 的原始回复
+    round-01-codex.md                     — 阶段 B: Codex 回复
+    round-01-gemini.md                    — 阶段 B: Gemini 回复
+    round-01-codex.md.stderr.log          — 阶段 B: Codex stderr（实时）
+    impl-step-01-codex-review.md          — 阶段 C: 步骤 1 Codex 审查
+    impl-step-01-codex-review-r2.md       — 阶段 C: 修复后重审（如有）
+    impl-step-01-gemini-review.md         — 阶段 C: 步骤 1 Gemini 审查（如有）
+    *.stderr.log                          — 实时 stderr（IDE 可见）
+    *.stream.log                          — 完整 stdout
   prompts/
-    round-01-to-codex.md          — 发给 Codex 的完整 prompt（可审计）
-    round-01-to-gemini.md         — 发给 Gemini 的完整 prompt
+    round-01-to-codex.md                  — 阶段 B: 发给 Codex 的 prompt
+    impl-step-01-to-codex.md              — 阶段 C: 发给 Codex 的 prompt
 ```
+
+---
+
+## [!MANDATORY] 阶段转换自检
+
+每次阶段转换时，Claude **必须输出**以下自检（输出本身是执行确认）：
+
+### A → B（预案 → 会审）
+```
+Opus 说：[阶段门禁 A→B]
+- 预案文件：[路径]
+- 会话目录：${TK_SESSION_DIR}（目录存在：✅/❌）
+- 即将发送给：[Codex/Gemini/Both]
+- 路由策略：[串行/并行] + 理由
+```
+
+### B → C（会审 → 实施）
+```
+Opus 说：[阶段门禁 B→C]
+- Codex verdict：APPROVE ✅ / 其他 ❌
+- Gemini verdict：APPROVE ✅ / 其他 ❌
+- Opus 独立验证：APPROVE ✅ / 其他 ❌
+- 会话新鲜度：已检查 ✅ / 未检查 ❌
+- 用户确认实施：✅ / ❌
+```
+
+### 每步实施完成后
+```
+Opus 说：[步骤 N 完成]
+- 修改文件：[列表]
+- 已提交 Codex 审查：✅/❌
+- Codex verdict：[等待中/APPROVE/REVISE/REJECT]
+- 如果 REVISE 已修复并重新提交：✅/❌
+- 审查记录已保存到：${TK_SESSION_DIR}/rounds/impl-step-NN-*
+```
+
+---
 
 ## 约束
 

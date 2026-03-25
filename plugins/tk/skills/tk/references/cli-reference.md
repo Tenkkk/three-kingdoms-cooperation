@@ -153,7 +153,17 @@ PowerShell 不支持 `<` 重定向。等效写法：
 
 ## Worker 输出可见性
 
-- Claude Code 的 Bash 工具在命令**完成后**才将 stdout/stderr 一次性返回给用户，不支持实时流式透传
-- `call-worker.sh` 将 Worker 输出同时 `tee` 到 `${OUTPUT_FILE}.stream.log`
-- 用户可在 IDE 中另开终端执行 `tail -f <stream_log>` 实时逐行查看 Worker 输出
-- Claude 在调用 Worker 前会告知用户 stream log 路径
+- Claude Code 的 Bash 工具在命令**完成后**才将 stdout 一次性返回，不支持实时流式透传
+- `call-worker.sh` 现在**分离 stderr 和 stdout**：
+  - `${OUTPUT_FILE}.stderr.log` — Worker 的 stderr 输出，**在 IDE 中实时可见**（unbuffered），推荐用户打开此文件查看实时进度
+  - `${OUTPUT_FILE}.stream.log` — Worker 的 stdout 完整输出，命令完成后可用
+- Claude 在调用 Worker 前告知用户 `*.stderr.log` 路径（非 stream.log）
+- Codex exec 模式下：stderr = 实时进度信息，stdout = 最终结果
+
+## 超时与后台运行
+
+- Bash 工具最大 timeout = 600000ms (10 min)
+- Codex 审查经常超过 10 分钟
+- **[!MANDATORY] 必须使用 `run_in_background: true` 参数调用 Worker**
+- 命令完成后系统自动通知，使用 TaskOutput 获取结果
+- **禁止**设置 `timeout: 600000` 期望命令在时限内完成
