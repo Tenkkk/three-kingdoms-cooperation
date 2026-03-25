@@ -28,11 +28,7 @@ Claude (Opus) — Meeting host + executor
 ## Installation
 
 ```bash
-# Add the marketplace
-/plugin marketplace add Tenkkk/three-kingdoms-cooperation
-
-# Install the plugin
-/plugin install tk@three-kingdoms-cooperation
+npx skills add Tenkkk/three-kingdoms-cooperation
 ```
 
 ## Usage
@@ -79,7 +75,7 @@ Claude: [Implements step by step, Codex reviews each step]
 Pure Claude Code skill — no TypeScript, no Python, no build step, no dependencies. Just markdown instructions and one bash script.
 
 ```
-plugins/tk/skills/
+skills/
   tk/
     SKILL.md                 — Main skill file
     references/

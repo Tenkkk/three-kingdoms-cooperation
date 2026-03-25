@@ -28,11 +28,7 @@ Claude (Opus) — 会议主持人 + 执行者
 ## 安装
 
 ```bash
-# 添加 marketplace
-/plugin marketplace add Tenkkk/three-kingdoms-cooperation
-
-# 安装插件
-/plugin install tk@three-kingdoms-cooperation
+npx skills add Tenkkk/three-kingdoms-cooperation
 ```
 
 ## 使用方式
@@ -79,7 +75,7 @@ Claude: [逐步实施，Codex 逐步审查]
 纯 Claude Code 技能 — 无 TypeScript、无 Python、无构建步骤、无依赖。只有 Markdown 指令和一个 Bash 脚本。
 
 ```
-plugins/tk/skills/
+skills/
   tk/
     SKILL.md                 — 技能主文件
     references/
