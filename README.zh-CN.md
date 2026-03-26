@@ -114,4 +114,4 @@ skills/
 
 ## 开源协议
 
-[MIT](LICENSE)
+[CC BY-NC 4.0 (署名-非商业性使用)](LICENSE)

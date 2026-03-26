@@ -110,4 +110,4 @@ This skill is refined from 10+ real production sessions and supports three colla
 
 ## License
 
-[MIT](LICENSE)
+[CC BY-NC 4.0](LICENSE)
