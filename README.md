@@ -1,3 +1,5 @@
+![alt text](img.png)
+
 # Three Kingdoms (/tk)
 
 **[中文文档](README.zh-CN.md)**
