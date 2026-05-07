@@ -76,6 +76,22 @@ is_gitignored() {
   git check-ignore -q "$1" 2>/dev/null
 }
 
+# --- UUID 生成（Gemini --session-id 用；Git Bash 无 uuidgen，依次回退 python/powershell）---
+gen_uuid() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import uuid; print(uuid.uuid4())'
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import uuid; print(uuid.uuid4())'
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command '[guid]::NewGuid().ToString()' | tr -d '\r\n'
+  else
+    echo "ERROR: no uuid generator (need uuidgen, python, or powershell.exe)" >&2
+    return 1
+  fi
+}
+
 case "$WORKER" in
   codex)
     CODEX_ARGS=""
@@ -96,15 +112,18 @@ case "$WORKER" in
       GEMINI_ARGS="--approval-mode yolo"
     fi
     if [ -n "$SESSION_ID" ]; then
-      # Resume 指定会话（必须用 -p 传 prompt，位置参数在 resume 模式下会超时）
-      gemini --resume "$SESSION_ID" $GEMINI_ARGS -p "$(cat "$PROMPT_FILE")" 2> "$STDERR_FILE" | tee "$OUTPUT_FILE" "$STREAM_LOG"
+      # Resume 指定会话（接受任意之前用过的 UUID；必须用 -p 传 prompt，位置参数在 resume 模式下会超时）
+      gemini --resume "$SESSION_ID" $GEMINI_ARGS -p "$(cat "$PROMPT_FILE")" 2>> "$STDERR_FILE" | tee "$OUTPUT_FILE" "$STREAM_LOG"
     else
-      # 新会话：优先用 @file 注入（避免 bash 管道截断/转义问题）
-      # 但 @file 对 gitignored 文件不可用（Gemini 会跳过），需要 fallback 到内联 prompt
+      # 新会话：host 自带 UUID（--session-id <uuid>），并以 Codex 同款 banner 写入 stderr.log，
+      # 让调用方用同一段 grep 模式从 stderr.log 抓取 session id。
+      NEW_ID="$(gen_uuid)"
+      echo "session id: $NEW_ID" >> "$STDERR_FILE"
+      # @file 对 gitignored 文件不可用（Gemini 会跳过），需要 fallback 到内联 prompt
       if is_gitignored "$PROMPT_FILE"; then
-        gemini $GEMINI_ARGS "$(cat "$PROMPT_FILE")" 2> "$STDERR_FILE" | tee "$OUTPUT_FILE" "$STREAM_LOG"
+        gemini --session-id "$NEW_ID" $GEMINI_ARGS "$(cat "$PROMPT_FILE")" 2>> "$STDERR_FILE" | tee "$OUTPUT_FILE" "$STREAM_LOG"
       else
-        gemini $GEMINI_ARGS "请处理以下任务：@${PROMPT_FILE}" 2> "$STDERR_FILE" | tee "$OUTPUT_FILE" "$STREAM_LOG"
+        gemini --session-id "$NEW_ID" $GEMINI_ARGS "请处理以下任务：@${PROMPT_FILE}" 2>> "$STDERR_FILE" | tee "$OUTPUT_FILE" "$STREAM_LOG"
       fi
     fi
     ;;

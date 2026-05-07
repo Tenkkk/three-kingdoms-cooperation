@@ -39,9 +39,10 @@ These four rules govern the full /tk workflow and **override** any conflicting w
 ### Rule 2: Multi-Round Reviews MUST Resume Worker Sessions
 
 - For any "same-topic, multi-round review" (Phase B Round N+1, Phase C step review-fix loops, post-fix re-review), `resume` the previous worker session is the **default behavior**, not an option.
-- **Codex session_id extraction**: After each call, grep `session id:` from the worker's `*.stderr.log`. Pass the extracted ID as the 5th argument to `call-worker.sh`. Example: `grep -oP 'session id:\s*\K[a-f0-9-]+' "${stderr_log}" | head -1`.
+- **Session_id extraction (works for both workers identically)**: After each call, grep `session id:` from the worker's `*.stderr.log`. Pass the extracted ID as the 5th argument to `call-worker.sh`. Example: `grep -oP 'session id:\s*\K[a-f0-9-]+' "${stderr_log}" | head -1`.
+  - Codex prints `session id:` to stderr natively.
+  - Gemini does not — `call-worker.sh` generates a UUID via `--session-id <uuid>` for new sessions and writes the same `session id:` banner into `*.stderr.log`. The grep pattern above works for both workers without branching.
 - **Persistence responsibility**: `call-worker.sh` does **NOT** auto-write `sessions.json`. The host (Claude) **MUST** manually maintain `${TK_SESSION_DIR}/sessions.json` after each call: `{ worker, topic, session_id, started_at, status }`. Read sessions.json at the start of each round to find the right session_id to resume.
-- **Gemini limitation**: Gemini does not print `session id:` to stderr — its `--resume` is currently unavailable. Mark `gemini_resume_unavailable: true` in `sessions.json` to avoid repeated grep attempts.
 - **When NOT to resume**: scope switch (Rule 1 — restart Phase A with fresh session), context window saturation, or worker self-reports session degradation. Open a fresh session, not resume.
 
 ### Rule 3: Verify Real Data Before Writing Plans

@@ -107,9 +107,26 @@ gemini "<prompt>" --output-format json
 # 恢复 cwd 下最近会话（必须用 -p）
 gemini --resume latest -p "follow-up prompt"
 
-# 恢复指定会话（必须用 -p）
+# 恢复指定会话（接受任意之前用过的 UUID；必须用 -p）
 gemini --resume <session-id> -p "follow-up prompt"
 ```
+
+### 会话 ID 预定（host 自带 UUID）
+
+Gemini 不像 Codex 那样在 stderr 主动打印 session id。但提供 `--session-id <UUID>` 让调用方在启动新会话时**预先指定** UUID，后续即可用同一 UUID 通过 `--resume` 恢复。
+
+```bash
+# 启新会话时由 host 生成 UUID 并预先指定
+gemini --session-id "<predetermined-uuid>" "<prompt>"
+
+# 后续可用同一 UUID resume（接受任意之前用过的 UUID，不只是 latest 或索引）
+gemini --resume "<predetermined-uuid>" -p "<follow-up>"
+
+# 列出当前 project 的所有会话（含 UUID）作为兜底查找
+gemini --list-sessions
+```
+
+`call-worker.sh` 在 gemini 新会话路径自动调用 `gen_uuid` 生成 UUID 并以 Codex 同款 `session id: <uuid>` banner 写入 `*.stderr.log`，让 host 用同一段 grep 模式从 stderr.log 抓取 session id（两 worker 同构）。
 
 ### 关键特性
 
@@ -150,6 +167,7 @@ PowerShell 不支持 `<` 重定向。等效写法：
 - ✅ Session ID 提取：Codex `--json` 首条 `thread.started` 含 `thread_id`；Gemini `--output-format json` 顶层含 `session_id`
 - ✅ Codex session ID 也可从 stderr banner 的 `session id:` 行提取
 - ✅ Gemini resume 必须用 `-p` 传 prompt（位置参数会超时，Codex 审查 + 实测确认）
+- ✅ Gemini `--session-id <UUID>` 可由 host 预先指定 UUID 启新会话，后续 `--resume <UUID>` 直接恢复（2026-05-07 实测；call-worker.sh 已自动化此路径，写 `session id:` banner 到 stderr.log，与 Codex 同构）
 
 ## Worker 输出可见性
 
