@@ -26,6 +26,40 @@ Trigger this skill when the user says any of the following:
 
 ---
 
+## [!MANDATORY] Hard Rules (Read First)
+
+These four rules govern the full /tk workflow and **override** any conflicting wording in later sections. Do not skip them.
+
+### Rule 1: Phase Switching Discipline (Per-Scope, Not Per-Session)
+
+- **A→B→C is per-scope, not per-session.** Any new variation in scope (new feature, additional refactor, term renaming, follow-up request, etc.) within an active /tk session **MUST** restart from Phase A — write a new plan, run a fresh review. Session continuity ≠ scope continuity.
+- **REVISE ≠ APPROVE.** Phase B convergence requires **Codex APPROVE + Gemini APPROVE + Claude APPROVE**. When any worker returns REVISE, you **MUST** update plan.md and re-submit for review (Round N+1, N+2...) until all three APPROVE. **Do NOT enter Phase C on REVISE**, and do not enter Phase C just because the REVISE feedback "looks reasonable" — the reviewers must confirm the fix.
+- **Phase B is read-only on project code.** During review, you **MUST NOT** edit project source files, install dependencies, run migrations, or modify anything outside `${TK_SESSION_DIR}/`. Phase B writes are limited to `${TK_SESSION_DIR}/plan.md` and `${TK_SESSION_DIR}/prompts/*.md`. Project source code only changes after the user explicitly says "start implementation" (Phase C).
+
+### Rule 2: Multi-Round Reviews MUST Resume Worker Sessions
+
+- For any "same-topic, multi-round review" (Phase B Round N+1, Phase C step review-fix loops, post-fix re-review), `resume` the previous worker session is the **default behavior**, not an option.
+- **Codex session_id extraction**: After each call, grep `session id:` from the worker's `*.stderr.log`. Pass the extracted ID as the 5th argument to `call-worker.sh`. Example: `grep -oP 'session id:\s*\K[a-f0-9-]+' "${stderr_log}" | head -1`.
+- **Persistence responsibility**: `call-worker.sh` does **NOT** auto-write `sessions.json`. The host (Claude) **MUST** manually maintain `${TK_SESSION_DIR}/sessions.json` after each call: `{ worker, topic, session_id, started_at, status }`. Read sessions.json at the start of each round to find the right session_id to resume.
+- **Gemini limitation**: Gemini does not print `session id:` to stderr — its `--resume` is currently unavailable. Mark `gemini_resume_unavailable: true` in `sessions.json` to avoid repeated grep attempts.
+- **When NOT to resume**: scope switch (Rule 1 — restart Phase A with fresh session), context window saturation, or worker self-reports session degradation. Open a fresh session, not resume.
+
+### Rule 3: Verify Real Data Before Writing Plans
+
+- **Phase A plan.md MUST cite real data sources, not assumptions.** Any plan content that references existing data structures, DB schemas, API responses, model fields, or runtime behavior **MUST** be backed by one of: (a) actual DB query result, (b) reading the relevant API route / service code, (c) running a test command and observing output.
+- **No "probably looks like this" speculation.** If you don't know the structure, query/read first, then write the plan. The marginal cost of one DB query or one Read is far smaller than a Phase B reviewer catching the mismatch and forcing multi-round REVISE.
+- **Common failure mode**: writing a plan based on guessed shape → reviewers catch the mismatch → wasted REVISE rounds + user trust erodes. Always verify upfront.
+
+### Rule 4: Provider-Agnostic Naming
+
+- Pipeline names, Stage names, enum values, code paths, file/directory names, API routes, DB columns, and `entityType` identifiers **MUST** reflect the **methodology** (what the thing does), not the **provider/model** (which vendor implements it today).
+- ❌ Bad: `GPT_STORYBOARD`, `gpt-storyboard/`, `seedance-pipeline`, `Stage: GPT 分镜表`, `Stage: Seedance 生视频`, `entityType: 'sora2-clip'`.
+- ✅ Good: `STORYBOARD`, `storyboard/`, `reference-video-pipeline`, `Stage: 分镜表生成`, `Stage: 参考生视频`, `entityType: 'reference-video'`.
+- **Self-check question**: "If we swap the model/provider tomorrow, does this name still make sense?" If no, rename before committing to it.
+- **Provider locality**: record the current provider/model only in config files (`.env`, `config/providers.ts`) or runtime documentation, never in code identifiers, file paths, or DB schemas.
+
+---
+
 ## [!MANDATORY] Session Initialization
 
 After `/tk` is triggered, **the very first step** must be executing the following initialization. All subsequent operations depend on this result:
